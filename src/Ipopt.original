@@ -15,24 +15,7 @@ export createProblem, addOption
 export openOutputFile, setProblemScaling, setIntermediateCallback
 export solveProblem
 export IpoptProblem
-export getProblemStats, returnProblemStats, returnProblemInfoStats
 
-# Example solver statistics type
-type IpoptProblemStats    # mirrors C type defined in IpStdCInterfaceStats.h
-                          # TODO: add all stats from SolveStatistics class in
-                          #       IpSolveStatistics.hpp
-  num_iters::Cint
-  total_cpu_time::Float64
-  total_sys_time::Float64
-  total_wallclock_time::Float64
-  obj_val::Float64
-
-  function IpoptProblemStats(; num_iters = Cint(0), total_cpu_time = 0.0,
-      total_sys_time = 0.0, total_wallclock_time = 0.0, obj_val = 0.0)
-    new(num_iters, total_cpu_time, total_sys_time, total_wallclock_time,
-        obj_val)
-  end
-end
 
 type IpoptProblem
     ref::Ptr{Void}  # Reference to the internal data structure
@@ -57,21 +40,13 @@ type IpoptProblem
     # For MathProgBase
     sense::Symbol
 
-    # Solve stats
-    num_iters::Int
-    total_cpu_time::Float64
-    total_sys_time::Float64
-    total_wallclock_time::Float64
-    stats::IpoptProblemStats
-
     function IpoptProblem(
         ref::Ptr{Void}, n, m,
         eval_f, eval_g, eval_grad_f, eval_jac_g, eval_h)
         prob = new(ref, n, m, zeros(Float64, n), zeros(Float64, m), zeros(Float64,m),
         zeros(Float64,n), zeros(Float64,n), 0.0, 0,
         eval_f, eval_g, eval_grad_f, eval_jac_g, eval_h, nothing,
-        :Min,
-        0, 0.0, 0.0, 0.0, IpoptProblemStats())
+        :Min)
         # Free the internal IpoptProblem structure when
         # the Julia IpoptProblem instance goes out of scope
         finalizer(prob, freeProblem)
@@ -321,41 +296,6 @@ function solveProblem(prob::IpoptProblem)
     prob.status = @compat Int(ret)
 
     return @compat Int(ret)
-end
-
-function getProblemStats(prob::IpoptProblem)
-    num_iters = [Cint(0)]
-    total_cpu_time = [0.0]
-    total_sys_time = [0.0]
-    total_wallclock_time = [0.0]
-    obj_val = [0.0]
-
-    ccall((:GetIpoptProblemStats, "libipoptstats.so"),
-          Void,
-          (Ptr{Void}, Ptr{Cint}, Ptr{Float64}, Ptr{Float64}, Ptr{Float64},
-          Ptr{Float64}),
-          prob.ref, num_iters, total_cpu_time, total_sys_time,
-          total_wallclock_time, obj_val);
-
-    prob.num_iters = num_iters[1]
-    prob.total_cpu_time = total_cpu_time[1]
-    prob.total_sys_time = total_sys_time[1]
-    prob.total_wallclock_time = total_wallclock_time[1]
-end
-
-function returnProblemStats(prob::IpoptProblem)
-    ret = ccall((:ReturnIpoptProblemStats, "libipoptstats.so"),
-                Ptr{IpoptProblemStats},
-                (Ptr{Void},),
-                prob.ref)
-    prob.stats = unsafe_load(ret)
-end
-
-function returnProblemInfoStats(prob::IpoptProblem)
-    prob.stats = ccall((:ReturnIpoptProblemInfoStats, "libipoptstats.so"),
-                      IpoptProblemStats,
-                      (Ptr{Void},),
-                      prob.ref)
 end
 
 include("IpoptSolverInterface.jl")
